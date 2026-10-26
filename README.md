@@ -13,7 +13,7 @@ distrobox on Bazzite / Fedora Atomic, reachable **on a single address only**. Th
 
 ```bash
 scripts/install.sh      # .env + keys, host cleanup, box, "OpenHands Agent Canvas" icon in the app menu
-scripts/menu.sh         # interactive menu for everything below
+./menu.sh               # interactive menu for everything below
 ```
 
 The icon starts Agent Canvas in the background (if it isn't running) and opens the UI in the browser.
@@ -39,7 +39,7 @@ Example: `scripts/install.sh --bind-ip 192.168.200.48 --port 8002 --remove-host-
 
 ### Menu
 
-`scripts/menu.sh` shows the current state and offers: start + open UI, open UI, stop, status, follow log,
+`./menu.sh` shows the current state and offers: start + open UI, open UI, stop, status, follow log,
 copy API key (to the Wayland clipboard, paste-once, never printed), shell in the box, upgrade, recreate box,
 host cleanup, install, reinstall icon and remove box. It uses `gum` (ships with Bazzite) and falls back to a
 plain numbered menu (`MENU_PLAIN=1` forces that).

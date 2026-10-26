@@ -131,4 +131,4 @@ esac
 
 "$REPO_DIR/scripts/setup.sh" "${replace[@]}"
 install_launcher
-ok "find 'OpenHands Agent Canvas' in the app menu, or run scripts/menu.sh"
+ok "find 'OpenHands Agent Canvas' in the app menu, or run ./menu.sh"

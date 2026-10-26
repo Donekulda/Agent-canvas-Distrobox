@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Interactive menu for all scripts. Uses gum (ships with Bazzite) if available, else bash select.
-#   scripts/menu.sh
-#   MENU_PLAIN=1 scripts/menu.sh   force the plain bash select menu
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+#   ./menu.sh
+#   MENU_PLAIN=1 ./menu.sh   force the plain bash select menu
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/lib.sh"
 
 [[ -t 0 && -t 1 ]] || die "menu.sh needs a terminal"
 S="$REPO_DIR/scripts"

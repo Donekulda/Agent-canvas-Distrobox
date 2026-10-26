@@ -29,10 +29,10 @@ safe alternative. If unsure whether something is safe, treat it as unsafe and as
 
 All code, comments, docs and commit messages are in English.
 
-- `scripts/*.sh` run on the host and source `scripts/lib.sh` (`load_env`, `require_bind_ip`, `running_pid`…).
+- `menu.sh` and `scripts/*.sh` run on the host and source `scripts/lib.sh` (`load_env`, `require_bind_ip`, `running_pid`…).
 - `scripts/install.sh` (options: `--help`) = `.env` flags + host cleanup + `setup.sh` + desktop launcher (`~/.local/share/applications/agent-canvas-distrobox.desktop`,
   icon from `assets/agent-canvas-distrobox.svg`). The launcher runs `scripts/launch.sh` (start -d + open UI, `--stop`).
-- `scripts/menu.sh` is an interactive front end (gum, bash `select` fallback); it only calls the other scripts.
+- `menu.sh` (repo root) is an interactive front end (gum, bash `select` fallback); it only calls the other scripts.
 - `scripts/host-cleanup.sh` removes Agent Canvas installed on the host; detection helpers (`host_installs`,
   `host_running_pids`, `host_state_dirs`) live in `lib.sh` and are used by `status.sh`/`start.sh`/`launch.sh`.
 - `acquire_lock` (flock, fd 9) serialises start/stop/setup/upgrade/destroy; children inherit `AC_LOCK_HELD`.
@@ -47,4 +47,4 @@ All code, comments, docs and commit messages are in English.
 - Network isolation relies on `unshare_netns` + `--publish $BIND_IP:$PORT:8000`; agent-canvas itself
   binds 0.0.0.0/:: and has no host option.
 - `scripts/box/run.sh` pins `UV_PYTHON=3.12` and `UV_CONSTRAINT=constraints.txt` (fastapi<0.155 for agent-server 1.44).
-- Check: `bash -n scripts/*.sh scripts/box/*.sh`, then `scripts/status.sh`.
+- Check: `bash -n menu.sh scripts/*.sh scripts/box/*.sh`, then `scripts/status.sh`.
