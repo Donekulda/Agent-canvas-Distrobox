@@ -1,0 +1,13 @@
+# Rendered by scripts/setup.sh into ~/.config/distrobox/${BOX_NAME}.ini
+# Recreate declaratively: distrobox assemble create --replace --file ~/.config/distrobox/${BOX_NAME}.ini
+[${BOX_NAME}]
+image=${BOX_IMAGE}
+home=${BOX_HOME}
+volume="${PROJECTS_DIR}:/projects:rw"
+# Own network namespace; only the ingress port is published, and only on BIND_IP.
+unshare_netns=true
+unshare_ipc=true
+unshare_process=true
+unshare_groups=true
+additional_flags="--publish ${BIND_IP}:${PORT}:8000"
+start_now=false

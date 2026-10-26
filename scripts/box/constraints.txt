@@ -1,0 +1,5 @@
+# uv constraints for the uvx-launched agent-server / automation (exported as UV_CONSTRAINT by run.sh).
+# openhands-agent-server 1.44.0 passes Query(lte=...); FastAPI >= 0.155 rejects unknown kwargs
+# ("Query() got an unexpected keyword argument 'lte'"). Fixed upstream in agent-server 1.49.x –
+# drop this pin once AGENT_CANVAS_VERSION ships a newer default agent-server.
+fastapi<0.155
