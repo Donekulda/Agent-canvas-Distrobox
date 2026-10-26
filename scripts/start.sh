@@ -44,8 +44,9 @@ if (( ! detach )); then
   exec distrobox enter "$BOX_NAME" -- "$BOX_LIBEXEC/run.sh"
 fi
 
+# No tty for this enter: when a tty exec session ends, podman kills everything it started – even setsid'd.
 box_exec bash -c 'setsid "$1" >"$2" 2>&1 </dev/null & echo $! >"$3"' _ \
-  "$BOX_LIBEXEC/run.sh" "$LOG_FILE" "$PID_FILE" 9>&-
+  "$BOX_LIBEXEC/run.sh" "$LOG_FILE" "$PID_FILE" </dev/null
 log "started in background (pid $(<"$PID_FILE") in box), log: $LOG_FILE"
 
 for _ in $(seq 60); do

@@ -3,9 +3,6 @@
 # Run scripts/install.sh --help for the options.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-APP_ID=agent-canvas-distrobox
-DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
-DESKTOP_FILE="$DATA_HOME/applications/$APP_ID.desktop"
 ICON_DIR="$DATA_HOME/icons/hicolor"
 ICON_FILE="$ICON_DIR/scalable/apps/$APP_ID.svg"
 

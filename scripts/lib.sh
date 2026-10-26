@@ -5,6 +5,10 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_DIR/.env"
 LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/agent-canvas-distrobox.lock"
+APP_ID=agent-canvas-distrobox
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+# App-menu launcher written by scripts/install.sh.
+DESKTOP_FILE="$DATA_HOME/applications/$APP_ID.desktop"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m ✓\033[0m %s\n' "$*"; }
@@ -26,6 +30,7 @@ require_cmds() {
 
 valid_version() { [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; }
 valid_port()    { [[ $1 =~ ^[0-9]{1,5}$ ]] && (( $1 >= 1 && $1 <= 65535 )); }
+valid_lang()    { [[ $1 =~ ^(en|cs)$ ]]; }
 valid_ipv4() {
   local IFS=. octet
   [[ $1 =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
@@ -71,6 +76,7 @@ load_env() {
   : "${BOX_HOME:?BOX_HOME not set in .env}"
   PORT="${PORT:-8000}"
   MODE="${MODE:-full}"
+  MENU_LANG="${MENU_LANG:-}"
   [[ $MODE == full || $MODE == frontend-only ]] || die "MODE must be 'full' or 'frontend-only', got '$MODE'"
 
   # Paths are identical inside and outside the box (distrobox mounts BOX_HOME at the same path).
@@ -97,8 +103,11 @@ acquire_lock() {
 release_lock() { exec 9>&-; unset AC_LOCK_HELD; }
 
 # Publishing on an address the host doesn't have fails (e.g. after a DHCP change).
+bind_ip_present() {
+  ip -4 -o addr show | awk '{split($4, a, "/"); print a[1]}' | grep -qxF "$BIND_IP"
+}
 require_bind_ip() {
-  ip -4 -o addr show | awk '{split($4, a, "/"); print a[1]}' | grep -qxF "$BIND_IP" \
+  bind_ip_present \
     || die "BIND_IP $BIND_IP is not on any host interface (ip -4 addr). Fix BIND_IP in .env and recreate the box (scripts/setup.sh --replace)."
 }
 
@@ -118,7 +127,18 @@ require_published_matches() {
     || die "box publishes '$published' but .env says $BIND_IP:$PORT – recreate the box: scripts/setup.sh --replace"
 }
 
-box_exec() { distrobox enter "$BOX_NAME" -- "$@"; }
+# agent-canvas version installed in the box, or nothing. Read on the host: BOX_HOME is a host path.
+installed_version() {
+  local pkg="$BOX_HOME/.local/lib/node_modules/@openhands/agent-canvas/package.json"
+  [[ -f $pkg ]] || return 0
+  sed -n 's/^  "version": *"\([^"]*\)".*/\1/p' "$pkg" | head -n 1
+}
+
+launcher_installed() { [[ -f $DESKTOP_FILE ]]; }
+
+# Entering may start the container: its conmon would keep an inherited fd 9 (and the lock) open
+# for as long as the box runs, so the box never gets the lock fd.
+box_exec() { distrobox enter "$BOX_NAME" -- "$@" 9>&-; }
 
 # Copy the in-box scripts into the box home (the repo path isn't mounted inside the box).
 install_box_scripts() {

@@ -39,10 +39,21 @@ Example: `scripts/install.sh --bind-ip 192.168.200.48 --port 8002 --remove-host-
 
 ### Menu
 
-`./menu.sh` shows the current state and offers: start + open UI, open UI, stop, status, follow log,
-copy API key (to the Wayland clipboard, paste-once, never printed), shell in the box, upgrade, recreate box,
-host cleanup, install, reinstall icon and remove box. It uses `gum` (ships with Bazzite) and falls back to a
-plain numbered menu (`MENU_PLAIN=1` forces that).
+`./menu.sh` opens with a dashboard:
+
+- **State** – box running/stopped, agent-canvas in background/foreground, URL reachability, the published
+  address vs `.env`, whether `BIND_IP` exists on a host interface;
+- **Installed** – agent-canvas version in the box vs `AGENT_CANVAS_VERSION`, image, projects folder,
+  launcher icon, leftovers on the host, API key set/missing (never the value), `gum`/`wl-copy`;
+- **To do** – what to fix next, each naming the menu action; the first one is preselected.
+
+Actions: start + open UI, open UI, stop, status, follow log, copy API key (to the Wayland clipboard
+marked sensitive so Klipper keeps it out of its history, cleared after 60 s, never printed), shell in the box, upgrade, recreate box, host cleanup, install, reinstall icon,
+remove box, refresh and language. It uses `gum` (ships with Bazzite) and falls back to a plain numbered
+menu (`MENU_PLAIN=1` forces that, `NO_COLOR=1` drops colours).
+
+The menu speaks English and Czech. **Language / Jazyk** saves the choice as `MENU_LANG=en|cs` in `.env`;
+empty means it follows the system locale (`cs_*` → Czech). The scripts' own output stays English.
 
 Manually:
 

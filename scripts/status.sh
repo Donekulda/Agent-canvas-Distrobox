@@ -14,6 +14,11 @@ printf '%-14s %s\n' "published:" "${published:-nothing}"
 [[ $published == "$BIND_IP:$PORT" ]] \
   || warn "box publishes '$published' but .env says $BIND_IP:$PORT – recreate the box: scripts/setup.sh --replace"
 printf '%-14s %s\n' "mode:" "$MODE"
+installed="$(installed_version)"
+printf '%-14s %s\n' "installed:" "${installed:-nothing} (.env: $AGENT_CANVAS_VERSION)"
+[[ $installed == "$AGENT_CANVAS_VERSION" ]] \
+  || warn "box has '${installed:-nothing}' but .env says $AGENT_CANVAS_VERSION – scripts/upgrade.sh"
+printf '%-14s %s\n' "launcher:" "$(launcher_installed && echo "$DESKTOP_FILE" || echo "none (scripts/install.sh --launcher)")"
 printf '%-14s %s\n' "api key:" "$([[ -n ${LOCAL_BACKEND_API_KEY:-} ]] && echo set || echo MISSING)"
 
 pid="$(running_pid)"

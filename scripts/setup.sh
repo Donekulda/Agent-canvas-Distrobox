@@ -31,13 +31,13 @@ if box_exists; then
   if (( replace )); then
     confirm "Recreate box '$BOX_NAME'? (box home $BOX_HOME is kept)" || die "aborted"
     "$REPO_DIR/scripts/stop.sh" >/dev/null 2>&1 || true
-    distrobox assemble create --replace --file "$INI_FILE"
+    distrobox assemble create --replace --file "$INI_FILE" 9>&-
   else
     ok "box '$BOX_NAME' already exists (use --replace to recreate)"
   fi
 else
   log "Creating box '$BOX_NAME' ($BOX_IMAGE)"
-  distrobox assemble create --file "$INI_FILE"
+  distrobox assemble create --file "$INI_FILE" 9>&-
 fi
 
 # Older boxes (created without entry=false) have a distrobox menu entry – remove it.
