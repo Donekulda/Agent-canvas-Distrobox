@@ -12,8 +12,15 @@ case "${1:-}" in
 esac
 
 load_env
+acquire_lock
 require_bind_ip
 box_exists || die "box '$BOX_NAME' does not exist – run scripts/setup.sh"
+require_published_matches
+
+# Exactly one Agent Canvas: refuse to run next to one started directly on the host.
+host_pids="$(host_running_pids | tr '\n' ' ')"
+[[ -z $host_pids ]] || die "Agent Canvas is running on the host outside the box (pid $host_pids) – remove it: scripts/host-cleanup.sh"
+[[ -z $(host_installs) ]] || warn "Agent Canvas is also installed on the host – remove it: scripts/host-cleanup.sh"
 [[ -n ${LOCAL_BACKEND_API_KEY:-} ]] || die "LOCAL_BACKEND_API_KEY is empty in .env (public mode requires it)"
 
 install_box_scripts
@@ -32,11 +39,13 @@ pid="$(running_pid)"
 
 if (( ! detach )); then
   log "Agent Canvas ($MODE) → $URL  (UI asks for LOCAL_BACKEND_API_KEY from .env)"
+  # running_pid now sees this instance, so the lock isn't needed while it runs (and stop.sh needs it).
+  release_lock
   exec distrobox enter "$BOX_NAME" -- "$BOX_LIBEXEC/run.sh"
 fi
 
 box_exec bash -c 'setsid "$1" >"$2" 2>&1 </dev/null & echo $! >"$3"' _ \
-  "$BOX_LIBEXEC/run.sh" "$LOG_FILE" "$PID_FILE"
+  "$BOX_LIBEXEC/run.sh" "$LOG_FILE" "$PID_FILE" 9>&-
 log "started in background (pid $(<"$PID_FILE") in box), log: $LOG_FILE"
 
 for _ in $(seq 60); do

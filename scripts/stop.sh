@@ -12,18 +12,22 @@ case "${1:-}" in
 esac
 
 load_env
+acquire_lock
 box_exists || die "box '$BOX_NAME' does not exist"
 
 pid="$(running_pid)"
 if [[ -n $pid ]]; then
   log "Stopping agent-canvas (pid $pid in box)"
-  # setsid made it a process-group leader: signal the whole group (agent-server, automation, ingress).
-  podman exec "$BOX_NAME" kill -TERM -- "-$pid" 2>/dev/null || true
+  # A background instance (pid file) is a setsid process-group leader: signal the whole group
+  # (agent-server, automation, ingress). A foreground one gets the signal itself and forwards it.
+  target="$pid"
+  [[ -f $PID_FILE && $(<"$PID_FILE") == "$pid" ]] && target="-$pid"
+  podman exec "$BOX_NAME" kill -TERM -- "$target" 2>/dev/null || true
   for _ in $(seq 20); do
     podman exec "$BOX_NAME" kill -0 "$pid" 2>/dev/null || break
     sleep 1
   done
-  podman exec "$BOX_NAME" kill -KILL -- "-$pid" 2>/dev/null || true
+  podman exec "$BOX_NAME" kill -KILL -- "$target" 2>/dev/null || true
   ok "agent-canvas stopped"
 else
   ok "agent-canvas not running (background instance)"

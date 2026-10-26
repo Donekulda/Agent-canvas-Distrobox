@@ -30,12 +30,20 @@ safe alternative. If unsure whether something is safe, treat it as unsafe and as
 All code, comments, docs and commit messages are in English.
 
 - `scripts/*.sh` run on the host and source `scripts/lib.sh` (`load_env`, `require_bind_ip`, `running_pid`…).
-- `scripts/install.sh` = `setup.sh` + desktop launcher (`~/.local/share/applications/agent-canvas-distrobox.desktop`,
+- `scripts/install.sh` (options: `--help`) = `.env` flags + host cleanup + `setup.sh` + desktop launcher (`~/.local/share/applications/agent-canvas-distrobox.desktop`,
   icon from `assets/agent-canvas-distrobox.svg`). The launcher runs `scripts/launch.sh` (start -d + open UI, `--stop`).
+- `scripts/menu.sh` is an interactive front end (gum, bash `select` fallback); it only calls the other scripts.
+- `scripts/host-cleanup.sh` removes Agent Canvas installed on the host; detection helpers (`host_installs`,
+  `host_running_pids`, `host_state_dirs`) live in `lib.sh` and are used by `status.sh`/`start.sh`/`launch.sh`.
+- `acquire_lock` (flock, fd 9) serialises start/stop/setup/upgrade/destroy; children inherit `AC_LOCK_HELD`.
+  Long-lived children (agent-canvas, the browser) must not inherit fd 9 – `release_lock` or `9>&-` first.
+- `.env` writes go through `set_env` (keeps 0600); values are validated first (`valid_*` in `lib.sh`).
 - `scripts/box/*.sh` run INSIDE the box. The repo path isn't mounted there, so `install_box_scripts`
   copies them into `$BOX_HOME/.local/libexec/agent-canvas-box/` before each use.
 - The box definition is `distrobox.ini.tmpl` → rendered by `setup.sh` (envsubst) into
   `~/.config/distrobox/$BOX_NAME.ini` → `distrobox assemble create`. Change container properties there.
+  `entry=false` keeps distrobox from adding its own menu entry. `BIND_IP`/`PORT`/`PROJECTS_DIR` are fixed at
+  create time; `require_published_matches` catches `.env` edits that need `setup.sh --replace`.
 - Network isolation relies on `unshare_netns` + `--publish $BIND_IP:$PORT:8000`; agent-canvas itself
   binds 0.0.0.0/:: and has no host option.
 - `scripts/box/run.sh` pins `UV_PYTHON=3.12` and `UV_CONSTRAINT=constraints.txt` (fastapi<0.155 for agent-server 1.44).

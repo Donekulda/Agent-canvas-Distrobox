@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_DIR/.env"
+LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/agent-canvas-distrobox.lock"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m ✓\033[0m %s\n' "$*"; }
@@ -21,6 +22,42 @@ require_cmds() {
   for cmd in "$@"; do
     command -v "$cmd" >/dev/null || die "missing command: $cmd"
   done
+}
+
+valid_version() { [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; }
+valid_port()    { [[ $1 =~ ^[0-9]{1,5}$ ]] && (( $1 >= 1 && $1 <= 65535 )); }
+valid_ipv4() {
+  local IFS=. octet
+  [[ $1 =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  for octet in $1; do (( octet <= 255 )) || return 1; done
+}
+
+# Create .env from the template and generate missing keys. .env stays 0600.
+ensure_env() {
+  if [[ ! -f $ENV_FILE ]]; then
+    log "Creating .env from .env.example"
+    (umask 077 && cp "$REPO_DIR/.env.example" "$ENV_FILE")
+  fi
+  chmod 600 "$ENV_FILE"
+  local key
+  for key in LOCAL_BACKEND_API_KEY OH_SECRET_KEY; do
+    if grep -qE "^$key=$" "$ENV_FILE"; then
+      sed -i "s|^$key=$|$key=$(openssl rand -hex 32)|" "$ENV_FILE"
+      ok "generated $key"
+    fi
+  done
+}
+
+# Set KEY=VALUE in .env (replace or append). Callers validate VALUE.
+set_env() {
+  local key="$1" value="$2" tmp
+  [[ $value != *[$'\n'\\]* ]] || die "invalid value for $key"
+  tmp="$(mktemp "$ENV_FILE.XXXXXX")" # 0600, gitignored (.env.*)
+  awk -v k="$key" -v v="$value" '
+    index($0, k "=") == 1 { print k "=" v; done = 1; next }
+    { print }
+    END { if (!done) print k "=" v }' "$ENV_FILE" > "$tmp"
+  mv -f "$tmp" "$ENV_FILE"
 }
 
 load_env() {
@@ -43,8 +80,21 @@ load_env() {
   LOG_FILE="$BOX_STATE/agent-canvas.log"
   SECRETS_FILE="$BOX_STATE/secrets.env"
   INI_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/distrobox/$BOX_NAME.ini"
+  # The .desktop file distrobox generates for a box (we disable it with entry=false).
+  BOX_ENTRY_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/applications/$BOX_NAME.desktop"
   URL="http://$BIND_IP:$PORT"
 }
+
+# One start/stop/setup at a time (double-clicked icon, menu + terminal…). Child scripts inherit
+# AC_LOCK_HELD and skip it. Long-lived children (agent-canvas, browser) must not inherit fd 9:
+# call release_lock before exec'ing them, or they would hold the lock forever.
+acquire_lock() {
+  [[ ${AC_LOCK_HELD:-} == 1 ]] && return 0
+  exec 9>>"$LOCK_FILE"
+  flock -n 9 || die "another start/stop/setup of Agent Canvas is in progress – try again in a moment"
+  export AC_LOCK_HELD=1
+}
+release_lock() { exec 9>&-; unset AC_LOCK_HELD; }
 
 # Publishing on an address the host doesn't have fails (e.g. after a DHCP change).
 require_bind_ip() {
@@ -53,6 +103,20 @@ require_bind_ip() {
 }
 
 box_exists() { podman container exists "$BOX_NAME"; }
+box_running() { [[ $(podman container inspect -f '{{.State.Running}}' "$BOX_NAME" 2>/dev/null) == true ]]; }
+
+# Host address:port the box actually publishes (fixed at create time; .env edits need --replace).
+box_published() {
+  podman container inspect -f \
+    '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}}{{.HostIP}}:{{.HostPort}} {{end}}{{end}}' \
+    "$BOX_NAME" 2>/dev/null | xargs
+}
+require_published_matches() {
+  local published
+  published="$(box_published)"
+  [[ $published == "$BIND_IP:$PORT" ]] \
+    || die "box publishes '$published' but .env says $BIND_IP:$PORT – recreate the box: scripts/setup.sh --replace"
+}
 
 box_exec() { distrobox enter "$BOX_NAME" -- "$@"; }
 
@@ -64,12 +128,53 @@ install_box_scripts() {
 }
 
 # PID (inside the box's PID namespace) of a running agent-canvas, or nothing.
+# Covers the background instance (pid file) and a foreground one (scripts/start.sh without -d).
 running_pid() {
-  [[ -f $PID_FILE ]] || return 0
+  box_running || return 0
   local pid
-  pid="$(<"$PID_FILE")"
-  [[ $(podman container inspect -f '{{.State.Running}}' "$BOX_NAME" 2>/dev/null) == true ]] || return 0
-  if podman exec "$BOX_NAME" kill -0 "$pid" 2>/dev/null; then
-    echo "$pid"
+  if [[ -f $PID_FILE ]]; then
+    pid="$(<"$PID_FILE")"
+    if podman exec "$BOX_NAME" kill -0 "$pid" 2>/dev/null; then
+      echo "$pid"
+      return 0
+    fi
   fi
+  podman exec "$BOX_NAME" pgrep -o -f 'bin/agent-canvas --public' 2>/dev/null || true
+}
+
+# --- Agent Canvas installed directly on the host (outside the box) ---------------------------
+
+# Host state dirs of a host install. Only these subdirs: ~/.openhands may belong to other tools.
+HOST_STATE_DIRS=("$HOME/.openhands/agent-canvas" "$HOME/.openhands/automation")
+
+# Module dirs of host installs. Globs instead of PATH: nvm isn't loaded in a desktop session.
+host_installs() {
+  local p
+  for p in "$HOME"/.nvm/versions/node/*/lib/node_modules/@openhands/agent-canvas \
+           "$HOME"/.local/lib/node_modules/@openhands/agent-canvas \
+           "$HOME"/.npm/_npx/*/node_modules/@openhands/agent-canvas \
+           /usr/local/lib/node_modules/@openhands/agent-canvas \
+           /usr/lib/node_modules/@openhands/agent-canvas; do
+    [[ -d $p ]] && echo "$p"
+  done
+  return 0
+}
+
+# Host PIDs of agent-canvas node processes that are NOT in the box (box processes live in a
+# libpod cgroup). Only node: shells, editors or podman whose args mention agent-canvas don't count.
+host_running_pids() {
+  local pid
+  for pid in $(pgrep -u "$(id -u)" -f '(bin/agent-canvas|@openhands/agent-canvas)' || true); do
+    [[ $(cat "/proc/$pid/comm" 2>/dev/null) == node ]] || continue
+    grep -q libpod "/proc/$pid/cgroup" 2>/dev/null && continue
+    echo "$pid"
+  done
+}
+
+host_state_dirs() {
+  local d
+  for d in "${HOST_STATE_DIRS[@]}"; do
+    [[ -e $d ]] && echo "$d"
+  done
+  return 0
 }

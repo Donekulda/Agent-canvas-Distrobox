@@ -11,21 +11,11 @@ case "${1:-}" in
   *) die "usage: $0 [--replace]" ;;
 esac
 
-require_cmds distrobox podman openssl envsubst ip curl
+require_cmds distrobox podman openssl envsubst ip curl flock
 
-if [[ ! -f $ENV_FILE ]]; then
-  log "Creating .env from .env.example"
-  (umask 077 && cp "$REPO_DIR/.env.example" "$ENV_FILE")
-fi
-chmod 600 "$ENV_FILE"
-for key in LOCAL_BACKEND_API_KEY OH_SECRET_KEY; do
-  if grep -qE "^$key=$" "$ENV_FILE"; then
-    sed -i "s|^$key=$|$key=$(openssl rand -hex 32)|" "$ENV_FILE"
-    ok "generated $key"
-  fi
-done
-
+ensure_env
 load_env
+acquire_lock
 require_bind_ip
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/agent-projects}"
 mkdir -p "$BOX_HOME" "$PROJECTS_DIR"
@@ -49,6 +39,9 @@ else
   log "Creating box '$BOX_NAME' ($BOX_IMAGE)"
   distrobox assemble create --file "$INI_FILE"
 fi
+
+# Older boxes (created without entry=false) have a distrobox menu entry – remove it.
+distrobox generate-entry "$BOX_NAME" --delete >/dev/null 2>&1 || true
 
 install_box_scripts
 log "Provisioning inside the box (first enter runs the distrobox init, this can take minutes)"

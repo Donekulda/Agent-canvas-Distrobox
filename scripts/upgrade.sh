@@ -5,11 +5,12 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 load_env
+acquire_lock
 box_exists || die "box '$BOX_NAME' does not exist – run scripts/setup.sh"
 
 if [[ -n ${1:-} ]]; then
-  [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || die "not a version: $1"
-  sed -i "s|^AGENT_CANVAS_VERSION=.*|AGENT_CANVAS_VERSION=$1|" "$ENV_FILE"
+  valid_version "$1" || die "not a version: $1"
+  set_env AGENT_CANVAS_VERSION "$1"
   AGENT_CANVAS_VERSION="$1"
 fi
 

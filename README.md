@@ -12,13 +12,37 @@ distrobox on Bazzite / Fedora Atomic, reachable **on a single address only**. Th
 ## Quick start
 
 ```bash
-scripts/install.sh      # setup.sh + "OpenHands Agent Canvas" icon in the app menu
+scripts/install.sh      # .env + keys, host cleanup, box, "OpenHands Agent Canvas" icon in the app menu
+scripts/menu.sh         # interactive menu for everything below
 ```
 
 The icon starts Agent Canvas in the background (if it isn't running) and opens the UI in the browser.
 Right-click → *Stop Agent Canvas* stops it. Launcher log: `$BOX_HOME/.config/agent-canvas-box/launcher.log`.
-`scripts/install.sh --launcher` only reinstalls the icon (e.g. after moving the repo),
-`scripts/install.sh --uninstall` removes the icon (the box stays).
+Clicking it again while it is starting only shows a notification – a lock allows one start/stop at a time.
+
+### install.sh options
+
+| Option | Effect |
+|---|---|
+| `--bind-ip IP` | host address the UI is published on (written to `.env`) |
+| `--port N` | host port |
+| `--version X.Y.Z` | `@openhands/agent-canvas` version in the box |
+| `--mode full\|frontend-only` | see `MODE` below |
+| `--projects-dir DIR` | absolute host path mounted as `/projects` |
+| `--remove-host-install` | remove Agent Canvas installed directly on the host without asking |
+| `--keep-host-install` | leave it (not recommended) |
+| `--launcher` | only (re)install the icon, e.g. after moving the repo |
+| `--uninstall` | remove the icon (the box stays) |
+
+Changing `--bind-ip`, `--port` or `--projects-dir` on an existing box recreates it (asks first; data is kept).
+Example: `scripts/install.sh --bind-ip 192.168.200.48 --port 8002 --remove-host-install`.
+
+### Menu
+
+`scripts/menu.sh` shows the current state and offers: start + open UI, open UI, stop, status, follow log,
+copy API key (to the Wayland clipboard, paste-once, never printed), shell in the box, upgrade, recreate box,
+host cleanup, install, reinstall icon and remove box. It uses `gum` (ships with Bazzite) and falls back to a
+plain numbered menu (`MENU_PLAIN=1` forces that).
 
 Manually:
 
@@ -40,6 +64,7 @@ More commands:
 
 | Script | What it does |
 |---|---|
+| `scripts/host-cleanup.sh [--check]` | removes Agent Canvas installed on the host (see below) |
 | `scripts/setup.sh --replace` | recreates the box (box home and data are kept), e.g. after changing `BIND_IP` |
 | `scripts/upgrade.sh [version]` | installs another `@openhands/agent-canvas` version (and writes it to `.env`) |
 | `scripts/destroy.sh [--purge-home]` | removes the box, with `--purge-home` also all data |
@@ -87,14 +112,24 @@ Remote backends (Settings → Backends) are reachable from the box as usual; out
   firewalld (FedoraWorkstation zone) on Bazzite allows 1025–65535/tcp, so the whole LAN will see the UI and
   only the key protects it.
 
-## Host installation
+## Agent Canvas on the host
 
-If you also have `@openhands/agent-canvas` installed directly on the host (`npm i -g`), don't run it at the
-same time as the box, or uninstall it: `npm rm -g @openhands/agent-canvas`. Host state (`~/.openhands/agent-canvas`)
-and box state (`$BOX_HOME/.openhands/agent-canvas`) are separate.
+Only the box instance should exist. `scripts/status.sh` reports leftovers outside the box, `start.sh` and the
+icon refuse to start while a host instance runs, and `scripts/host-cleanup.sh` removes them (after one prompt):
+
+- running host instances (`node …/agent-canvas`, outside the box's cgroup)
+- global installs in nvm (`~/.nvm/versions/node/*`), `~/.local` and the npx cache (`~/.npm/_npx`)
+- host state with its keys: `~/.openhands/agent-canvas`, `~/.openhands/automation` (deleted, not backed up)
+- the menu entry distrobox generates for the box (terminal + a "Remove" action); new boxes get `entry=false`
+
+`scripts/install.sh` runs the check and asks; `--remove-host-install` / `--keep-host-install` decide upfront.
+The box state (`$BOX_HOME/.openhands/agent-canvas`) is never touched.
 
 ## Troubleshooting
 
+- `box publishes '127.0.0.1:8000' but .env says …`: `BIND_IP`/`PORT` in `.env` were edited after the box was
+  created. Recreate it: `scripts/setup.sh --replace` (or menu → Recreate box).
+- `another start/stop/setup of Agent Canvas is in progress`: wait for the other run to finish.
 - `BIND_IP … is not on any host interface`: the IP changed (DHCP). Fix `.env` and run `scripts/setup.sh --replace`,
   or set up a DHCP reservation.
 - The first start is slow: `uvx` downloads `openhands-agent-server` (about 200 MB). Follow it with

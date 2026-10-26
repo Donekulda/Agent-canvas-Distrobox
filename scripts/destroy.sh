@@ -12,6 +12,7 @@ case "${1:-}" in
 esac
 
 load_env
+acquire_lock
 
 if box_exists; then
   confirm "Remove box '$BOX_NAME'?" || die "aborted"
